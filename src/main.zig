@@ -13,6 +13,7 @@ pub fn main() !void {
     const arena_allocator = arena.allocator();
 
     const config = try Config.initFromJsonFile(arena_allocator);
+
     const gist_uri = config.gist_uri;
     const ddns_domains = config.ddns_domains;
 
@@ -21,6 +22,7 @@ pub fn main() !void {
         logger.info("DDNS Domain: {s}", .{domain});
     }
 
+    // TODO: pass the config object to this function
     const ip = get_ip.getIp(arena_allocator) catch {
         logger.fatal("Failed to get IP address", .{});
         std.process.exit(1);

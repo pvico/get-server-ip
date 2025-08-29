@@ -16,6 +16,8 @@ const NULL_DOMAIN: []const u8 = "0.0.0.0" ++ .{0} ** 9;
 
 const IpError = error{IpNotFound};
 
+
+// TODO: pass the config object to this function
 pub fn getIp(allocator: std.mem.Allocator) ![]u8 {
     const ip = try allocator.alloc(u8, 16);
     // ip is returned, it cannot be freed normally in this scope
