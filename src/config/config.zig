@@ -31,43 +31,65 @@ pub const Config = struct {
     }
 
     pub fn jsonParseFromValue(allocator: std.mem.Allocator, json_value_source: std.json.Value, _: json.ParseOptions) !Self {
-        if (json_value_source != .object) {
-            return error.UnexpectedToken;
-        }
+        if (json_value_source != .object) return error.UnexpectedToken;
 
-        var result_config = try Self.init(allocator);
-        errdefer result_config.deinit(allocator);
+        var config = try Self.init(allocator);
+        errdefer config.deinit(allocator);
 
         var json_value_source_iterator = json_value_source.object.iterator();
 
         while (json_value_source_iterator.next()) |json_key_value| {
-            inline for (std.meta.fields(Self)) |field_info| {
-                const struct_field_name = field_info.name;
-                if (std.mem.eql(u8, struct_field_name, json_key_value.key_ptr.*)) {
-                    if (std.mem.eql(u8, struct_field_name, "ddns_domains")) {
-                        // struct_field_name equals "ddns_domains"
-                        for (json_key_value.value_ptr.array.items) |item| {
-                            const ddns_uri = item.string;
-                            // logger.info("ddns_uri: {s}", .{ddns_uri});
-                            try result_config.add_ddns_domain(allocator, ddns_uri);
-                        }
-                    } else if (std.mem.eql(u8, struct_field_name, "gist_uri")) {
-                        // struct_field_name equals "gist_uri"
-                        result_config.gist_uri = json_key_value.value_ptr.string;
-                    } else {
-                        return error.UnexpectedToken;
-                    }
+            const key = json_key_value.key_ptr.*;
+            const val = json_key_value.value_ptr.*;
+            if (std.mem.eql(u8, "ddns_domains", key)) {
+                for (val.array.items) |item| {
+                    if (item != .string) return error.UnexpectedToken;
+                    try config.add_ddns_domain(allocator, item.string);
                 }
+            } else if (std.mem.eql(u8, "gist_uri", key)) {
+                if (val != .string) return error.UnexpectedToken;
+                config.gist_uri = val.string;
+            } else {
+                return error.UnexpectedToken;
             }
         }
 
-        return result_config;
+        return config;
     }
 
-    pub fn fromJson(allocator: std.mem.Allocator, json_string: []const u8) !json.Parsed(Self) {
+    pub fn fromJson(allocator: std.mem.Allocator, json_string: []const u8) !Self {
         const parsedValue = try json.parseFromSlice(json.Value, allocator, json_string, .{});
-        defer parsedValue.deinit();
-        
-        return try json.parseFromValue(Self, allocator, parsedValue.value, .{});
+
+        const parsed_config = try json.parseFromValue(Self, allocator, parsedValue.value, .{});
+
+        return parsed_config.value;
+    }
+
+    pub fn initFromJsonFile(arena_allocator: std.mem.Allocator) !Self {
+        const exe_path = std.fs.selfExeDirPathAlloc(arena_allocator) catch {
+            logger.fatal("Failed to get executable path", .{});
+            std.process.exit(1);
+        };
+
+        const config_path_parts = [_][]const u8{
+            exe_path,
+            ".get-server-ip",
+            "config.json",
+        };
+        const config_path = std.fs.path.join(arena_allocator, &config_path_parts) catch {
+            logger.fatal("Failed to create config path", .{});
+            std.process.exit(1);
+        };
+
+        const config_file = std.fs.openFileAbsolute(config_path, .{}) catch {
+            logger.fatal("Failed to open config file {s}", .{config_path});
+            std.process.exit(1);
+        };
+        defer config_file.close();
+
+        const json_config = try config_file.readToEndAlloc(arena_allocator, std.math.maxInt(usize));
+        const config = try Config.fromJson(arena_allocator, json_config);
+
+        return config;
     }
 };

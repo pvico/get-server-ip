@@ -8,48 +8,23 @@ const dns = @import("dns/dns.zig");
 const Config = @import("config/config.zig").Config;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
 
-    // config
-    const exe_path = std.fs.selfExeDirPathAlloc(allocator) catch {
-        logger.fatal("Failed to get executable path", .{});
-        std.process.exit(1);
-    };
-    defer allocator.free(exe_path);
+    const config = try Config.initFromJsonFile(arena_allocator);
+    const gist_uri = config.gist_uri;
+    const ddns_domains = config.ddns_domains;
 
-    const config_path_parts = [_][]const u8{
-        exe_path,
-        ".get-server-ip",
-        "config.json",
-    };
-    const config_path = std.fs.path.join(allocator, &config_path_parts) catch {
-        logger.fatal("Failed to create config path", .{});
-        std.process.exit(1);
-    };
-    defer allocator.free(config_path);
+    logger.info("Gist URI: {s}", .{gist_uri});
+    for (ddns_domains.items) |domain| {
+        logger.info("DDNS Domain: {s}", .{domain});
+    }
 
-    const config_file = std.fs.openFileAbsolute(config_path, .{}) catch {
-        logger.fatal("Failed to open config file {s}", .{config_path});
-        std.process.exit(1);
-    };
-    defer config_file.close();
-
-    const json_config = try config_file.readToEndAlloc(allocator, std.math.maxInt(usize));
-    defer allocator.free(json_config);
-
-    var parsed_json_config = try Config.fromJson(allocator, json_config);
-    defer parsed_json_config.deinit();
-
-    // std.debug.print("Parsed JSON config: {any}", .{parsed_json_config});
-    // const parse_json_config = &parsed_json_config.value;
-
-    const ip = get_ip.getIp(allocator) catch {
+    const ip = get_ip.getIp(arena_allocator) catch {
         logger.fatal("Failed to get IP address", .{});
         std.process.exit(1);
     };
-    defer allocator.free(ip);
 
     try print.out("{s}\n", .{ip});
 }
