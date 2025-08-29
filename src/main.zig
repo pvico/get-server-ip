@@ -14,11 +14,8 @@ pub fn main() !void {
 
     const config = try Config.initFromJsonFile(arena_allocator);
 
-    const gist_uri = config.gist_uri;
-    const ddns_domains = config.ddns_domains;
-
-    logger.info("Gist URI: {s}", .{gist_uri});
-    for (ddns_domains.items) |domain| {
+    logger.info("Gist URI: {s}", .{config.gist_uri});
+    for (config.ddns_domains.items) |domain| {
         logger.info("DDNS Domain: {s}", .{domain});
     }
 
