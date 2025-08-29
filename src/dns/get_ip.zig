@@ -28,8 +28,7 @@ pub fn getIp(allocator: std.mem.Allocator) ![]u8 {
 
     var gist_ip_valid = false;
     const gist_ip = gist.getIp(arena_allocator);
-    if (gist_ip) |ip_local| {
-        logger.debug("Github gist IP: {s}", .{ip_local});
+    if (gist_ip) |_| {
         gist_ip_valid = true;
     } else |_| {
         logger.warn("Failed to get Github gist IP", .{});
@@ -40,7 +39,6 @@ pub fn getIp(allocator: std.mem.Allocator) ![]u8 {
     for (domains) |domain| {
         const dns_ip_local = dns.getIp(arena_allocator, domain);
         if (dns_ip_local) |ip_local| {
-            logger.debug("DNS IP for domain {s}: {s}", .{domain, ip_local });
             // Check if the DNS IP matches the Gist IP
             // If it is the case, we will copy the DNS IP to the output and return it
             domain_ips.put(domain, ip_local) catch |err| {
@@ -49,7 +47,7 @@ pub fn getIp(allocator: std.mem.Allocator) ![]u8 {
             if (gist_ip_valid) {
                 if (gist_ip) |gist_ip_local| {
                     if (std.mem.eql(u8, ip_local, gist_ip_local)) {
-                        logger.debug("Domain {s} matches gist IP", .{domain});
+                        // logger.debug("Domain {s} matches gist IP", .{domain});
                         @memcpy(ip, ip_local);
                         return ip;
                     }
@@ -70,7 +68,6 @@ pub fn getIp(allocator: std.mem.Allocator) ![]u8 {
             if (i_1 != i_2 and domain1_ip != null and domain2_ip != null) {
                 if (!std.mem.eql(u8, domain1_ip.?, NULL_DOMAIN)) {
                     if (std.mem.eql(u8, domain1_ip.?, domain2_ip.?)) {
-                        logger.debug("Domain IPs match: {s} == {s}", .{ domains[i_1], domains[i_2] });
                         @memcpy(ip, domain1_ip.?);
                         return ip;
                     }

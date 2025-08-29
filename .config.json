@@ -1,0 +1,8 @@
+{
+    "gist-uri": "https://gist.github.com/<my user name>/1234567890abcdef",
+    "ddns-domains": [
+        "mysubdomain.example.com",
+        "mysubdomain.example.org",
+        "mysubdomain.example.net"
+    ]
+}
