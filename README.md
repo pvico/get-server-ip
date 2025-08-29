@@ -1,4 +1,4 @@
-# getip
+# get-server-ip
 
 A utility to find the (dynamic) IP of the Raspberry Pi 5 server as updated by the n8n workflow
 
