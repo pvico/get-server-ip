@@ -20,7 +20,7 @@ pub fn main() !void {
     }
 
     // TODO: pass the config object to this function
-    const ip = get_ip.getIp(arena_allocator) catch {
+    const ip = get_ip.getIp(arena_allocator, config) catch {
         logger.fatal("Failed to get IP address", .{});
         std.process.exit(1);
     };

@@ -1,14 +1,14 @@
 const std = @import("std");
-const constants = @import("../constants.zig");
+const Config = @import("../config/config.zig").Config;
 
-pub fn getIp(allocator: std.mem.Allocator) ![]u8 {
+pub fn getIp(allocator: std.mem.Allocator, config: Config) ![]u8 {
     const ip = try allocator.alloc(u8, 16);
     // ip is returned, it cannot be freed normally in this scope
     errdefer allocator.free(ip);
     @memset(ip, 0);
     var writer: std.Io.Writer = .fixed(ip);
 
-    const uri: std.Uri = try std.Uri.parse(constants.GIST_URI);
+    const uri: std.Uri = try std.Uri.parse(config.gist_uri);
 
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();

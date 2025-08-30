@@ -2,14 +2,7 @@ const std = @import("std");
 const gist = @import("gist.zig");
 const logger = @import("../utilities/logger.zig");
 const dns = @import("dns.zig");
-const constants = @import("../constants.zig");
-
-const domains = [_][]const u8{
-    constants.DDNS_DOMAIN_1,
-    constants.DDNS_DOMAIN_2,
-    constants.DDNS_DOMAIN_3,
-    constants.DDNS_DOMAIN_4,
-};
+const Config = @import("../config/config.zig").Config;
 
 // Needed to compare with IP of "" domain
 const NULL_DOMAIN: []const u8 = "0.0.0.0" ++ .{0} ** 9;
@@ -18,7 +11,7 @@ const IpError = error{IpNotFound};
 
 
 // TODO: pass the config object to this function
-pub fn getIp(allocator: std.mem.Allocator) ![]u8 {
+pub fn getIp(allocator: std.mem.Allocator, config:Config) ![]u8 {
     const ip = try allocator.alloc(u8, 16);
     // ip is returned, it cannot be freed normally in this scope
     errdefer allocator.free(ip);
@@ -29,7 +22,7 @@ pub fn getIp(allocator: std.mem.Allocator) ![]u8 {
     const arena_allocator = aa.allocator();
 
     var gist_ip_valid = false;
-    const gist_ip = gist.getIp(arena_allocator);
+    const gist_ip = gist.getIp(arena_allocator, config);
     if (gist_ip) |_| {
         gist_ip_valid = true;
     } else |_| {
@@ -38,7 +31,7 @@ pub fn getIp(allocator: std.mem.Allocator) ![]u8 {
 
     var domain_ips = std.StringHashMap([]const u8).init(arena_allocator);
 
-    for (domains) |domain| {
+    for (config.ddns_domains.items) |domain| {
         const dns_ip_local = dns.getIp(arena_allocator, domain);
         if (dns_ip_local) |ip_local| {
             // Check if the DNS IP matches the Gist IP
@@ -63,9 +56,9 @@ pub fn getIp(allocator: std.mem.Allocator) ![]u8 {
     // Here, no match between gist ip and domain ips
     // We check if 2 or more domain ips match between themselves
     // If it is the case, return the first matching IP
-    for (domains, 0..) |domain1, i_1| {
+    for (config.ddns_domains.items, 0..) |domain1, i_1| {
             const domain1_ip = domain_ips.get(domain1);
-        for (domains, 0..) |domain2, i_2| {
+        for (config.ddns_domains.items, 0..) |domain2, i_2| {
             const domain2_ip = domain_ips.get(domain2);
             if (i_1 != i_2 and domain1_ip != null and domain2_ip != null) {
                 if (!std.mem.eql(u8, domain1_ip.?, NULL_DOMAIN)) {
