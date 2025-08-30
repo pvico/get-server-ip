@@ -1,6 +1,9 @@
 const std = @import("std");
 const json = std.json;
 const logger = @import("../utilities/logger.zig");
+const builtin = @import("builtin");
+
+const DEBUG_MODE = builtin.mode == std.builtin.OptimizeMode.Debug;
 
 pub const Config = struct {
     const Self = @This();
@@ -89,6 +92,13 @@ pub const Config = struct {
 
         const json_config = try config_file.readToEndAlloc(arena_allocator, std.math.maxInt(usize));
         const config = try Config.fromJson(arena_allocator, json_config);
+
+        if (DEBUG_MODE) {
+            logger.debug("Gist URI: {s}", .{config.gist_uri});
+            for (config.ddns_domains.items) |domain| {
+                logger.debug("DDNS Domain: {s}", .{domain});
+            }
+        }
 
         return config;
     }
