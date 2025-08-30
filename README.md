@@ -1,5 +1,7 @@
 # get-server-ip
 
+![version](https://img.shields.io/badge/Zig_version-0.15.1-green)
+
 A utility to find the (dynamic) IP of a server.
 
 It will
@@ -12,7 +14,6 @@ It will
 
 These IP sources are updated by some external automation (e.g. n8n workflow, node-red, etc.).
 
-![version](https://img.shields.io/badge/Zig_version-0.15.1-green)
 
 
 ## Configuration
