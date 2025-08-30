@@ -14,9 +14,19 @@ It will
 
 These IP sources are updated by some external automation (e.g. n8n workflow, node-red, etc.).
 
-
-
 ## Configuration
 
-Configure the gist file URI and the DDNS service domains URI's in the `config.json` file. 
+Configure the gist file URI and the DDNS service domains URI's in the `config.json` file.
 This file *must* be located in a subdirectory `.get-server-ip` of the cli executable location.
+
+## Usage
+
+```bash
+./get-server-ip
+```
+
+If using as input in another command, be sure to discard the stderr output:
+
+```bash
+ssh -p 2222 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "$(get-server-ip 2>/dev/null)"
+```
