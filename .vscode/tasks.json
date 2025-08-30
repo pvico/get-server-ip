@@ -47,12 +47,34 @@
       "label": "run-fast",
       "type": "shell",
       "command": "zsh",
-      "args": ["-c", "clear && zig build run --release=fast -- $*", "--", "${input:progArgs}"],
+      "args": [
+        "-c",
+        "clear && zig build run --release=fast -- $*",
+        "--",
+        "${input:progArgs}"
+      ],
       "group": "build",
       "presentation": {
         "echo": true,
         "reveal": "always",
         "focus": true,
+        "panel": "shared"
+      },
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "build-rpi5",
+      "type": "shell",
+      "command": "zsh",
+      "args": [
+        "-c",
+        "clear && zig build -Dtarget=aarch64-linux -Doptimize=ReleaseSmall --prefix zig-out/rpi5"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
         "panel": "shared"
       },
       "problemMatcher": "$rustc"
