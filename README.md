@@ -12,7 +12,8 @@ It will
 
 These IP sources are updated by some external automation (e.g. n8n workflow, node-red, etc.).
 
-Zig version 0.15.1
+![version](https://img.shields.io/badge/Zig_version-0.15.1-green)
+
 
 ## Configuration
 
