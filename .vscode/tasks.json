@@ -78,6 +78,23 @@
         "panel": "shared"
       },
       "problemMatcher": "$rustc"
+    },
+    {
+      "label": "build-rpi0",
+      "type": "shell",
+      "command": "zsh",
+      "args": [
+        "-c",
+        "clear && zig build -Dtarget=arm-linux-gnueabihf -Dcpu=arm1176jzf_s -Doptimize=ReleaseSmall --prefix zig-out/rpi0"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": "$rustc"
     }
   ],
   "inputs": [
