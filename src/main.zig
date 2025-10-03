@@ -1,8 +1,8 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const print = @import("utilities/print.zig");
 const logger = @import("utilities/logger.zig");
-
 
 const local_ethernet = @import("network/local_ethernet.zig");
 
@@ -25,6 +25,9 @@ pub fn main() !void {
     };
     defer allocator.free(ip);
 
+    if (builtin.os.tag == .linux) {
+        try local_ethernet.debugPrintLinuxInterfaces(allocator);
+    }
 
     try print.out("{s}\n", .{ip});
 }

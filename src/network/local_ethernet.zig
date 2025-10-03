@@ -10,6 +10,73 @@ const c = @cImport({
     @cInclude("string.h");
 });
 
+pub fn debugPrintLinuxInterfaces(allocator: std.mem.Allocator) !void {
+    if (builtin.target.os.tag != .linux) return;
+
+    const file_data = std.fs.cwd().readFileAlloc(allocator, "/proc/net/if_inet6", 64 * 1024) catch |err| {
+        logger.warn("Unable to read /proc/net/if_inet6: {s}", .{@errorName(err)});
+        return;
+    };
+    defer allocator.free(file_data);
+
+    const deprecated_mask: u32 = 0x20;
+    const permanent_mask: u32 = 0x80;
+
+    var lines = std.mem.splitScalar(u8, file_data, '\n');
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+
+        var tokens = std.mem.tokenizeAny(u8, line, " \t");
+        _ = tokens.next() orelse continue;
+        _ = tokens.next() orelse continue;
+        _ = tokens.next() orelse continue;
+        _ = tokens.next() orelse continue;
+        const flags_token = tokens.next() orelse continue;
+        _ = tokens.next() orelse continue;
+
+        const flags = std.fmt.parseInt(u32, flags_token, 16) catch continue;
+        const is_deprecated = (flags & deprecated_mask) != 0;
+        const is_dynamic = (flags & permanent_mask) == 0;
+
+        var status_buf: [32]u8 = undefined;
+        var status_len: usize = 0;
+
+        if (!is_deprecated and !is_dynamic) {
+            const word = "stable";
+            status_len = word.len;
+            std.mem.copyForwards(u8, status_buf[0..status_len], word);
+        } else {
+            if (is_dynamic) {
+                const word = "dynamic";
+                status_len = word.len;
+                std.mem.copyForwards(u8, status_buf[0..status_len], word);
+            }
+            if (is_deprecated) {
+                if (status_len != 0) {
+                    status_buf[status_len] = '+';
+                    status_len += 1;
+                }
+                const word = "deprecated";
+                std.mem.copyForwards(u8, status_buf[status_len .. status_len + word.len], word);
+                status_len += word.len;
+            }
+        }
+
+        try print.out("{s} {s}\n", .{ line, status_buf[0..status_len] });
+    }
+}
+
+fn interfaceExists(list: ?*c.struct_ifaddrs, name: [*:0]const u8) bool {
+    var cursor = list;
+    while (cursor) |node| {
+        if (c.strcmp(node.*.ifa_name, name) == 0) {
+            return true;
+        }
+        cursor = node.*.ifa_next;
+    }
+    return false;
+}
+
 fn in6AddrBytes(addr: *align(1) const c.struct_in6_addr) *const [16]u8 {
     if (@hasField(c.struct_in6_addr, "__u6_addr")) {
         return &addr.*.__u6_addr.__u6_addr8;
@@ -99,7 +166,7 @@ fn getPrefixLength(mask: ?*c.struct_sockaddr) u8 {
 }
 
 pub fn getLocalIPv6(allocator: std.mem.Allocator) ![]u8 {
-    const interface_name: [*:0]const u8 = switch (builtin.target.os.tag) {
+    var interface_name: [*:0]const u8 = switch (builtin.target.os.tag) {
         .macos => "en0",
         .linux => "eth0",
         else => "eth0",
@@ -110,6 +177,14 @@ pub fn getLocalIPv6(allocator: std.mem.Allocator) ![]u8 {
         return error.GetIfAddrsFailed;
     }
     defer c.freeifaddrs(gpa.?);
+
+    if (builtin.target.os.tag == .linux) {
+        if (!interfaceExists(gpa, "eth0")) {
+            if (interfaceExists(gpa, "wlan0")) {
+                interface_name = "wlan0";
+            }
+        }
+    }
 
     var p = gpa;
     var best_buf: [c.INET6_ADDRSTRLEN]u8 = undefined;
