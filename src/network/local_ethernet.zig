@@ -344,24 +344,29 @@ fn shouldPrefer(
     new_status: AddressStatus,
     current_status: AddressStatus,
 ) bool {
+    const new_score: u3 = @intFromEnum(new_scope);
+    const current_score: u3 = @intFromEnum(current_scope);
+
+    if (new_score != current_score) {
+        if (new_score > current_score) {
+            if (new_status.deprecated and !current_status.deprecated) {
+                return false;
+            }
+            return true;
+        }
+
+        if (!new_status.deprecated and current_status.deprecated) {
+            return true;
+        }
+
+        return false;
+    }
+
     const new_rank = new_status.rank();
     const current_rank = current_status.rank();
 
     if (new_rank != current_rank) {
         return new_rank < current_rank;
-    }
-
-    const new_score: u3 = @intFromEnum(new_scope);
-    const current_score: u3 = @intFromEnum(current_scope);
-
-    if (new_score != current_score) {
-        const new_is_better = new_score > current_score;
-        // if (new_is_better) {
-        //     print.err("Discarding address {s}\n", .{current_addr}) catch {};
-        // } else {
-        //     print.err("Discarding address {s}\n", .{new_addr}) catch {};
-        // }
-        return new_is_better;
     }
 
     if (new_prefix != current_prefix) {
