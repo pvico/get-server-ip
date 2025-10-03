@@ -10,6 +10,52 @@ const c = @cImport({
     @cInclude("string.h");
 });
 
+const AddressStatus = struct {
+    dynamic: bool = false,
+    deprecated: bool = false,
+
+    fn rank(self: AddressStatus) u2 {
+        var value: u2 = 0;
+        if (self.dynamic) value |= 1;
+        if (self.deprecated) value |= 2;
+        return value;
+    }
+
+    fn format(self: AddressStatus, buffer: []u8) []const u8 {
+        var len: usize = 0;
+        if (!self.dynamic and !self.deprecated) {
+            const word = "stable";
+            std.mem.copyForwards(u8, buffer[0..word.len], word);
+            len = word.len;
+        } else {
+            if (self.dynamic) {
+                const word = "dynamic";
+                std.mem.copyForwards(u8, buffer[0..word.len], word);
+                len = word.len;
+            }
+            if (self.deprecated) {
+                if (len != 0) {
+                    buffer[len] = '+';
+                    len += 1;
+                }
+                const word = "deprecated";
+                std.mem.copyForwards(u8, buffer[len .. len + word.len], word);
+                len += word.len;
+            }
+        }
+        return buffer[0..len];
+    }
+};
+
+fn addressStatusFromFlags(flags: u32) AddressStatus {
+    return .{
+        .dynamic = (flags & 0x80) == 0,
+        .deprecated = (flags & 0x20) != 0,
+    };
+}
+
+const AddressStatusMap = std.AutoHashMap([16]u8, AddressStatus);
+
 pub fn debugPrintLinuxInterfaces(allocator: std.mem.Allocator) !void {
     if (builtin.target.os.tag != .linux) return;
 
@@ -18,9 +64,6 @@ pub fn debugPrintLinuxInterfaces(allocator: std.mem.Allocator) !void {
         return;
     };
     defer allocator.free(file_data);
-
-    const deprecated_mask: u32 = 0x20;
-    const permanent_mask: u32 = 0x80;
 
     var lines = std.mem.splitScalar(u8, file_data, '\n');
     while (lines.next()) |line| {
@@ -35,34 +78,11 @@ pub fn debugPrintLinuxInterfaces(allocator: std.mem.Allocator) !void {
         _ = tokens.next() orelse continue;
 
         const flags = std.fmt.parseInt(u32, flags_token, 16) catch continue;
-        const is_deprecated = (flags & deprecated_mask) != 0;
-        const is_dynamic = (flags & permanent_mask) == 0;
-
+        const status = addressStatusFromFlags(flags);
         var status_buf: [32]u8 = undefined;
-        var status_len: usize = 0;
+        const status_slice = status.format(status_buf[0..]);
 
-        if (!is_deprecated and !is_dynamic) {
-            const word = "stable";
-            status_len = word.len;
-            std.mem.copyForwards(u8, status_buf[0..status_len], word);
-        } else {
-            if (is_dynamic) {
-                const word = "dynamic";
-                status_len = word.len;
-                std.mem.copyForwards(u8, status_buf[0..status_len], word);
-            }
-            if (is_deprecated) {
-                if (status_len != 0) {
-                    status_buf[status_len] = '+';
-                    status_len += 1;
-                }
-                const word = "deprecated";
-                std.mem.copyForwards(u8, status_buf[status_len .. status_len + word.len], word);
-                status_len += word.len;
-            }
-        }
-
-        try print.out("{s} {s}\n", .{ line, status_buf[0..status_len] });
+        try print.err("{s} {s}\n", .{ line, status_slice });
     }
 }
 
@@ -75,6 +95,60 @@ fn interfaceExists(list: ?*c.struct_ifaddrs, name: [*:0]const u8) bool {
         cursor = node.*.ifa_next;
     }
     return false;
+}
+
+fn linuxLoadAddressStatus(
+    allocator: std.mem.Allocator,
+    interface_name: [*:0]const u8,
+) AddressStatusMap {
+    var map = AddressStatusMap.init(allocator);
+
+    if (builtin.target.os.tag != .linux) return map;
+
+    const file_data = std.fs.cwd().readFileAlloc(allocator, "/proc/net/if_inet6", 64 * 1024) catch |err| {
+        logger.warn("Unable to read /proc/net/if_inet6: {s}", .{@errorName(err)});
+        return map;
+    };
+    defer allocator.free(file_data);
+
+    const iface = std.mem.span(interface_name);
+
+    var lines = std.mem.splitScalar(u8, file_data, '\n');
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+
+        var tokens = std.mem.tokenizeAny(u8, line, " \t");
+        const addr_token = tokens.next() orelse continue;
+        _ = tokens.next() orelse continue;
+        _ = tokens.next() orelse continue;
+        _ = tokens.next() orelse continue;
+        const flags_token = tokens.next() orelse continue;
+        const name_token = tokens.next() orelse continue;
+
+        if (!std.mem.eql(u8, name_token, iface)) continue;
+        if (addr_token.len != 32) continue;
+
+        var addr_bytes: [16]u8 = undefined;
+        var valid = true;
+        var i: usize = 0;
+        while (i < addr_token.len) : (i += 2) {
+            const value = std.fmt.parseInt(u8, addr_token[i .. i + 2], 16) catch {
+                valid = false;
+                break;
+            };
+            addr_bytes[i / 2] = value;
+        }
+        if (!valid) continue;
+
+        const flags = std.fmt.parseInt(u32, flags_token, 16) catch continue;
+        const status = addressStatusFromFlags(flags);
+
+        map.put(addr_bytes, status) catch {
+            // Ignore insertion failures; continue best effort.
+        };
+    }
+
+    return map;
 }
 
 fn in6AddrBytes(addr: *align(1) const c.struct_in6_addr) *const [16]u8 {
@@ -186,11 +260,18 @@ pub fn getLocalIPv6(allocator: std.mem.Allocator) ![]u8 {
         }
     }
 
+    var linux_status_map: ?AddressStatusMap = null;
+    if (builtin.target.os.tag == .linux) {
+        linux_status_map = linuxLoadAddressStatus(allocator, interface_name);
+    }
+    defer if (linux_status_map) |*map| map.deinit();
+
     var p = gpa;
     var best_buf: [c.INET6_ADDRSTRLEN]u8 = undefined;
     var best_len: usize = 0;
     var best_scope: AddressScope = .other;
     var best_prefix: u8 = 255;
+    var best_status: AddressStatus = .{};
     var have_best = false;
     while (p) |node| {
         if (c.strcmp(node.*.ifa_name, interface_name) == 0 and node.*.ifa_addr != null) {
@@ -214,13 +295,31 @@ pub fn getLocalIPv6(allocator: std.mem.Allocator) ![]u8 {
                 const scope = classifyIPv6(&sa6.*.sin6_addr) orelse {
                     continue;
                 };
+                var status = AddressStatus{};
+                if (linux_status_map) |*map| {
+                    const addr_bytes = in6AddrBytes(&sa6.*.sin6_addr).*;
+                    if (map.get(addr_bytes)) |entry| {
+                        status = entry;
+                    }
+                }
+
                 const prefix_len = getPrefixLength(node.*.ifa_netmask);
 
-                if (!have_best or shouldPrefer(scope, prefix_len, addr_slice, best_scope, best_prefix, best_buf[0..best_len])) {
+                if (!have_best or shouldPrefer(
+                    scope,
+                    prefix_len,
+                    addr_slice,
+                    best_scope,
+                    best_prefix,
+                    best_buf[0..best_len],
+                    status,
+                    best_status,
+                )) {
                     std.mem.copyForwards(u8, best_buf[0..nul_idx], addr_slice);
                     best_len = nul_idx;
                     best_scope = scope;
                     best_prefix = prefix_len;
+                    best_status = status;
                     have_best = true;
                 }
             }
@@ -242,16 +341,37 @@ fn shouldPrefer(
     current_scope: AddressScope,
     current_prefix: u8,
     current_addr: []const u8,
+    new_status: AddressStatus,
+    current_status: AddressStatus,
 ) bool {
+    const new_rank = new_status.rank();
+    const current_rank = current_status.rank();
+
+    if (new_rank != current_rank) {
+        return new_rank < current_rank;
+    }
+
     const new_score: u3 = @intFromEnum(new_scope);
     const current_score: u3 = @intFromEnum(current_scope);
 
     if (new_score != current_score) {
-        return new_score > current_score;
+        const new_is_better = new_score > current_score;
+        // if (new_is_better) {
+        //     print.err("Discarding address {s}\n", .{current_addr}) catch {};
+        // } else {
+        //     print.err("Discarding address {s}\n", .{new_addr}) catch {};
+        // }
+        return new_is_better;
     }
 
     if (new_prefix != current_prefix) {
-        return new_prefix < current_prefix;
+        const new_is_better = new_prefix > current_prefix;
+        // if (new_is_better) {
+        //     print.err("Discarding address {s}\n", .{current_addr}) catch {};
+        // } else {
+        //     print.err("Discarding address {s}\n", .{new_addr}) catch {};
+        // }
+        return new_is_better;
     }
 
     return std.mem.lessThan(u8, new_addr, current_addr);

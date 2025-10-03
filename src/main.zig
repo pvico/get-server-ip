@@ -1,6 +1,5 @@
 const std = @import("std");
 const builtin = @import("builtin");
-
 const print = @import("utilities/print.zig");
 const logger = @import("utilities/logger.zig");
 
@@ -19,15 +18,15 @@ pub fn main() !void {
     //     std.process.exit(1);
     // };
 
+    // if (builtin.os.tag == .linux) {
+    //     try local_ethernet.debugPrintLinuxInterfaces(allocator);
+    // }
+
     const ip = local_ethernet.getLocalIPv6(allocator) catch {
         logger.fatal("Failed to get IP address", .{});
         std.process.exit(1);
     };
     defer allocator.free(ip);
-
-    if (builtin.os.tag == .linux) {
-        try local_ethernet.debugPrintLinuxInterfaces(allocator);
-    }
 
     try print.out("{s}\n", .{ip});
 }
