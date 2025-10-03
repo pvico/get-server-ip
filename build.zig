@@ -57,41 +57,99 @@ pub fn build(b: *std.Build) void {
     //
     // If neither case applies to you, feel free to delete the declaration you
     // don't need and to put everything under a single module.
-    const exe = b.addExecutable(.{
-        .name = "get-server-ip",
-        .root_module = b.createModule(.{
-            // b.createModule defines a new module just like b.addModule but,
-            // unlike b.addModule, it does not expose the module to consumers of
-            // this package, which is why in this case we don't have to give it a name.
-            .root_source_file = b.path("src/main.zig"),
-            // Target and optimization levels must be explicitly wired in when
-            // defining an executable or library (in the root module), and you
-            // can also hardcode a specific target for an executable or library
-            // definition if desireable (e.g. firmware for embedded devices).
-            .target = target,
-            .optimize = optimize,
-            // List of modules available for import in source files part of the
-            // root module.
-            .imports = &.{
-
-                // Here "getip" is the name you will use in your source code to
-                // import this module (e.g. `@import("getip")`). The name is
-                // repeated because you are allowed to rename your imports, which
-                // can be extremely useful in case of collisions (which can happen
-                // importing modules from different packages).
-                // .{ .name = "getip", .module = mod },
-            },
-        }),
-    });
+    const pkg_build = @import("build.zig.zon");
 
     const clap_dep = b.dependency("clap", .{});
-    exe.root_module.addImport("clap", clap_dep.module("clap"));
 
-    // This declares intent for the executable to be installed into the
-    // install prefix when running `zig build` (i.e. when executing the default
-    // step). By default the install prefix is `zig-out/` but can be overridden
-    // by passing `--prefix` or `-p`.
-    b.installArtifact(exe);
+    const linux_x86_target = b.resolveTargetQuery(.{
+        .cpu_arch = .x86_64,
+        .os_tag = .linux,
+        .abi = .gnu,
+    });
+    const linux_aarch_target = b.resolveTargetQuery(.{
+        .cpu_arch = .aarch64,
+        .os_tag = .linux,
+        .abi = .gnu,
+    });
+    const rpi0_target = b.resolveTargetQuery(.{
+        .cpu_arch = .arm,
+        .os_tag = .linux,
+        .abi = .gnueabihf,
+        .cpu_model = .{ .explicit = &std.Target.arm.cpu.arm1176jzf_s },
+    });
+
+    const ArtifactConfig = struct {
+        name: []const u8,
+        step_name: []const u8,
+        step_desc: []const u8,
+        target: std.Build.ResolvedTarget,
+        optimize: std.builtin.OptimizeMode,
+        install_dir_override: ?std.Build.InstallDir,
+    };
+
+    const artifacts = [_]ArtifactConfig{
+        .{
+            .name = @tagName(pkg_build.name),
+            .step_name = "macos",
+            .step_desc = "Build the macOS binary",
+            .target = target,
+            .optimize = optimize,
+            .install_dir_override = null,
+        },
+        .{
+            .name = @tagName(pkg_build.name),
+            .step_name = "linux-x86_64",
+            .step_desc = "Build the Linux x86_64 binary",
+            .target = linux_x86_target,
+            .optimize = optimize,
+            .install_dir_override = .{ .custom = "x86_64/bin" },
+        },
+        .{
+            .name = @tagName(pkg_build.name),
+            .step_name = "linux-aarch64",
+            .step_desc = "Build the Linux aarch64 binary",
+            .target = linux_aarch_target,
+            .optimize = optimize,
+            .install_dir_override = .{ .custom = "rpi5/bin" },
+        },
+        .{
+            .name = @tagName(pkg_build.name),
+            .step_name = "rpi0",
+            .step_desc = "Build the Raspberry Pi Zero binary",
+            .target = rpi0_target,
+            .optimize = std.builtin.OptimizeMode.ReleaseSmall,
+            .install_dir_override = .{ .custom = "rpi0/bin" },
+        },
+    };
+
+    var native_exe: ?*std.Build.Step.Compile = null;
+
+    inline for (artifacts) |cfg| {
+        const exe = b.addExecutable(.{
+            .name = cfg.name,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/main.zig"),
+                .target = cfg.target,
+                .optimize = cfg.optimize,
+            }),
+        });
+        exe.linkLibC();
+        exe.root_module.addImport("clap", clap_dep.module("clap"));
+        var install_options = std.Build.Step.InstallArtifact.Options{};
+        if (cfg.install_dir_override) |dir| {
+            install_options.dest_dir = .{ .override = dir };
+        }
+        b.getInstallStep().dependOn(&b.addInstallArtifact(exe, install_options).step);
+
+        const step = b.step(cfg.step_name, cfg.step_desc);
+        step.dependOn(&exe.step);
+
+        if (native_exe == null) {
+            native_exe = exe;
+        }
+    }
+
+    const exe = native_exe.?;
 
     // This creates a top level step. Top level steps have a name and can be
     // invoked by name when running `zig build` (e.g. `zig build run`).
@@ -157,6 +215,5 @@ pub fn build(b: *std.Build) void {
     //
     // Lastly, the Zig build system is relatively simple and self-contained,
     // and reading its source code will allow you to master it.
-
 
 }

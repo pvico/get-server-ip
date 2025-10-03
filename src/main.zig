@@ -2,22 +2,29 @@ const std = @import("std");
 
 const print = @import("utilities/print.zig");
 const logger = @import("utilities/logger.zig");
-const gist = @import("dns/gist.zig");
-const get_ip = @import("dns/get_ip.zig");
-const dns = @import("dns/dns.zig");
-const Config = @import("config/config.zig").Config;
+
+
+const local_ethernet = @import("network/local_ethernet.zig");
 
 pub fn main() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    // var gpa = std.heap.DebugAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
-    const config = try Config.initFromJsonFile(arena_allocator);
+    // const config = try Config.initFromJsonFile(arena_allocator);
 
-    const ip = get_ip.getIp(arena_allocator, config) catch {
+    // const ip = get_ip.getIp(arena_allocator, config) catch {
+    //     logger.fatal("Failed to get IP address", .{});
+    //     std.process.exit(1);
+    // };
+
+    const ip = local_ethernet.getLocalIPv6(allocator) catch {
         logger.fatal("Failed to get IP address", .{});
         std.process.exit(1);
     };
+    defer allocator.free(ip);
+
 
     try print.out("{s}\n", .{ip});
 }
