@@ -22,8 +22,8 @@ pub fn main() !void {
     //     try local_ethernet.debugPrintLinuxInterfaces(allocator);
     // }
 
-    const ip = local_ethernet.getLocalIPv6(allocator) catch {
-        logger.fatal("Failed to get IP address", .{});
+    const ip = local_ethernet.getLocalIPv6(allocator) catch |err| {
+        logger.fatal("Failed to get IP address: {s}", .{@errorName(err)});
         std.process.exit(1);
     };
     defer allocator.free(ip);

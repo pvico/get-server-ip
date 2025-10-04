@@ -13,17 +13,18 @@ const c = @cImport({
 const AddressStatus = struct {
     dynamic: bool = false,
     deprecated: bool = false,
+    temporary: bool = false,
 
     fn rank(self: AddressStatus) u2 {
         var value: u2 = 0;
-        if (self.dynamic) value |= 1;
+        if (self.temporary) value |= 1;
         if (self.deprecated) value |= 2;
         return value;
     }
 
     fn format(self: AddressStatus, buffer: []u8) []const u8 {
         var len: usize = 0;
-        if (!self.dynamic and !self.deprecated) {
+        if (!self.dynamic and !self.deprecated and !self.temporary) {
             const word = "stable";
             std.mem.copyForwards(u8, buffer[0..word.len], word);
             len = word.len;
@@ -32,6 +33,15 @@ const AddressStatus = struct {
                 const word = "dynamic";
                 std.mem.copyForwards(u8, buffer[0..word.len], word);
                 len = word.len;
+            }
+            if (self.temporary) {
+                if (len != 0) {
+                    buffer[len] = '+';
+                    len += 1;
+                }
+                const word = "temporary";
+                std.mem.copyForwards(u8, buffer[len .. len + word.len], word);
+                len += word.len;
             }
             if (self.deprecated) {
                 if (len != 0) {
@@ -50,6 +60,7 @@ const AddressStatus = struct {
 fn addressStatusFromFlags(flags: u32) AddressStatus {
     return .{
         .dynamic = (flags & 0x80) == 0,
+        .temporary = (flags & 0x01) != 0,
         .deprecated = (flags & 0x20) != 0,
     };
 }
@@ -253,9 +264,40 @@ pub fn getLocalIPv6(allocator: std.mem.Allocator) ![]u8 {
     defer c.freeifaddrs(gpa.?);
 
     if (builtin.target.os.tag == .linux) {
-        if (!interfaceExists(gpa, "eth0")) {
-            if (interfaceExists(gpa, "wlan0")) {
-                interface_name = "wlan0";
+        const preferred = [_][*:0]const u8{
+            "eth0",
+            "end0",
+            "enp0s0",
+            "enp1s0",
+            "eno1",
+            "ens33",
+            "en0",
+            "wlan0",
+        };
+        var selected = false;
+        for (preferred) |candidate| {
+            // try print.err("Checking for interface: {s}\n", .{candidate});
+            if (interfaceExists(gpa, candidate)) {
+                interface_name = candidate;
+                selected = true;
+                break;
+            }
+        }
+        // try print.err("Selected interface name: {s}\n", .{interface_name});
+
+        if (!selected) {
+            var cursor = gpa;
+            while (cursor) |node| {
+                if (node.*.ifa_addr != null and node.*.ifa_addr.*.sa_family == c.AF_INET6) {
+                    if ((node.*.ifa_flags & c.IFF_LOOPBACK) != 0) {
+                        cursor = node.*.ifa_next;
+                        continue;
+                    }
+                    interface_name = node.*.ifa_name;
+                    selected = true;
+                    break;
+                }
+                cursor = node.*.ifa_next;
             }
         }
     }
@@ -273,7 +315,8 @@ pub fn getLocalIPv6(allocator: std.mem.Allocator) ![]u8 {
     var best_prefix: u8 = 255;
     var best_status: AddressStatus = .{};
     var have_best = false;
-    while (p) |node| {
+    while (p) |node| : (p = node.*.ifa_next) {
+        // try print.err("Examining interface: {s}\n", .{node.*.ifa_name});
         if (c.strcmp(node.*.ifa_name, interface_name) == 0 and node.*.ifa_addr != null) {
             if (node.*.ifa_addr.*.sa_family == c.AF_INET6) {
                 const sa6: *align(1) const c.struct_sockaddr_in6 = @as(
@@ -303,6 +346,10 @@ pub fn getLocalIPv6(allocator: std.mem.Allocator) ![]u8 {
                     }
                 }
 
+                if (status.temporary) {
+                    continue;
+                }
+
                 const prefix_len = getPrefixLength(node.*.ifa_netmask);
 
                 if (!have_best or shouldPrefer(
@@ -324,7 +371,6 @@ pub fn getLocalIPv6(allocator: std.mem.Allocator) ![]u8 {
                 }
             }
         }
-        p = node.*.ifa_next;
     }
 
     if (have_best) {
@@ -350,15 +396,19 @@ fn shouldPrefer(
     if (new_score != current_score) {
         if (new_score > current_score) {
             if (new_status.deprecated and !current_status.deprecated) {
+                // print.err("Discard {s}: prefer non-deprecated {s}\n", .{ new_addr, current_addr }) catch {};
                 return false;
             }
+            // print.err("Discard {s}: {s} has better scope\n", .{ current_addr, new_addr }) catch {};
             return true;
         }
 
         if (!new_status.deprecated and current_status.deprecated) {
+            // print.err("Discard {s}: deprecated vs {s}\n", .{ current_addr, new_addr }) catch {};
             return true;
         }
 
+        // print.err("Discard {s}: worse scope than {s}\n", .{ new_addr, current_addr }) catch {};
         return false;
     }
 
@@ -366,18 +416,30 @@ fn shouldPrefer(
     const current_rank = current_status.rank();
 
     if (new_rank != current_rank) {
+        if (new_rank < current_rank) {
+            // print.err("Discard {s}: new status outranks {s}\n", .{ current_addr, new_addr }) catch {};
+        } else {
+            // print.err("Discard {s}: status outranked by {s}\n", .{ new_addr, current_addr }) catch {};
+        }
         return new_rank < current_rank;
     }
 
     if (new_prefix != current_prefix) {
         const new_is_better = new_prefix > current_prefix;
-        // if (new_is_better) {
-        //     print.err("Discarding address {s}\n", .{current_addr}) catch {};
-        // } else {
-        //     print.err("Discarding address {s}\n", .{new_addr}) catch {};
-        // }
+        if (new_is_better) {
+            // print.err("Discard {s}: longer prefix beats {s}\n", .{ current_addr, new_addr }) catch {};
+        } else {
+            // print.err("Discard {s}: shorter prefix than {s}\n", .{ new_addr, current_addr }) catch {};
+        }
         return new_is_better;
     }
 
-    return std.mem.lessThan(u8, new_addr, current_addr);
+
+    const is_lexically_before = std.mem.lessThan(u8, new_addr, current_addr);
+    if (is_lexically_before) {
+        // print.err("Discard {s}: lexical order after {s}\n", .{ current_addr, new_addr }) catch {};
+    } else {
+        // print.err("Discard {s}: lexical order before {s}\n", .{ new_addr, current_addr }) catch {};
+    }
+    return is_lexically_before;
 }
