@@ -60,7 +60,9 @@ On the target devices, after `scripts/build-remote.sh` fetched the binaries:
 This installs the binary atomically as `~/bin/get-server-ip` on each device
 and seeds `~/bin/.get-server-ip/config.json` from the checked-in template
 when the device has no configuration yet — an existing config is never
-overwritten.
+overwritten. The binary of the old Zig implementation was named
+`get_server_ip` (underscores); the install script removes that legacy file
+when it finds it.
 
 ## Configuration
 

@@ -67,6 +67,12 @@ for host in "${hosts[@]}"; do
         continue
     fi
 
+    # Remove the legacy Zig-era binary (it was named with underscores).
+    if ssh -o BatchMode=yes "philippe@$host" "[ -e ~/$bin_dir/get_server_ip ]"; then
+        ssh -o BatchMode=yes "philippe@$host" "rm ~/$bin_dir/get_server_ip" \
+            && echo "==> $host: removed legacy get_server_ip"
+    fi
+
     echo "==> $host: done"
 done
 
