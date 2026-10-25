@@ -14,9 +14,11 @@ All items of the original Zig TODO list are covered by the Rust port:
 5. Time bound those retrievals — done: 5 s overall deadline, then fallback
    to the local interface IP
 
+Since the port, the deploy step was added as well: `scripts/build-remote.sh`
+builds natively on the devices and `scripts/install-remote.sh` installs the
+binaries into `~/bin` (seeding the config template, never overwriting).
+
 Remaining ideas:
 
-1. Deploy step: install the built binary (and a config template) onto the
-   target devices from `scripts/build-remote.sh`
-2. Optional IPv4 DDNS sources for dual-stack setups
-3. CI workflow running `cargo test`, `cargo clippy` and `cargo fmt --check`
+1. Optional IPv4 DDNS sources for dual-stack setups
+2. CI workflow running `cargo test`, `cargo clippy` and `cargo fmt --check`

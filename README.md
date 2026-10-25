@@ -43,6 +43,25 @@ and no Zig involved:
 
 The binaries land in `dist/<host>/get-server-ip`.
 
+## Installation
+
+On this Mac:
+
+```bash
+cp target/release/get-server-ip ~/bin/
+```
+
+On the target devices, after `scripts/build-remote.sh` fetched the binaries:
+
+```bash
+./scripts/install-remote.sh rpi5-server nanopi-r3s-lts btcnode
+```
+
+This installs the binary atomically as `~/bin/get-server-ip` on each device
+and seeds `~/bin/.get-server-ip/config.json` from the checked-in template
+when the device has no configuration yet — an existing config is never
+overwritten.
+
 ## Configuration
 
 Configure the gist file URI and the DDNS service domains in the `config.json`
