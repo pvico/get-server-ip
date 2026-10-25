@@ -15,7 +15,7 @@ pub struct Cli {
     #[arg(short, long, value_name = "FILE_PATH")]
     pub config: Option<PathBuf>,
 
-    /// Increase the verbosity of the log output (-v: info, -vv: debug).
+    /// Increase the verbosity of the log output (-v: warnings and info, -vv: debug).
     #[arg(short, long, action = clap::ArgAction::Count)]
     pub verbose: u8,
 }

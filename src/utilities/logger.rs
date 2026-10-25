@@ -4,15 +4,16 @@
 //! (91) and fatal white-on-red (97;41).
 //!
 //! Message visibility is gated by the verbosity level raised on the CLI
-//! (`-v`: info, `-vv`: debug) — TODO item 3 of the Zig version. Warnings,
-//! errors and fatal messages always print. Debug builds start fully verbose,
-//! preserving the Zig DEBUG_MODE behavior during development.
+//! (`-v`: warnings+info, `-vv`: +debug) — TODO item 3 of the Zig version.
+//! By default only fatal messages print, so plain output stays exactly like
+//! the old Zig binary: the IP and nothing else. Debug builds start fully
+//! verbose, preserving the Zig DEBUG_MODE behavior during development.
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use super::print;
 
-/// Current verbosity: 0 = warn/error/fatal, 1 = +info, 2 = +debug.
+/// Current verbosity: 0 = fatal only, 1 = +warnings/errors/info, 2 = +debug.
 static VERBOSITY: AtomicU8 = AtomicU8::new(0);
 
 /// Raise (or lower) the verbosity level, e.g. from the CLI `-v` counter.
@@ -46,13 +47,21 @@ pub fn debug(message: &str) {
 }
 
 /// Log a warning message (stderr, yellow "WARNING" prefix).
+/// Printed when verbosity is at least 1.
 pub fn warn(message: &str) {
+    if verbosity() < 1 {
+        return;
+    }
     let _ = print::err(&format!("\x1b[33mWARNING {message}\x1b[0m\n"));
 }
 
 /// Log an error message (stderr, bright red "ERROR" prefix).
+/// Printed when verbosity is at least 1.
 #[allow(dead_code)] // parity with the Zig logger API
 pub fn err(message: &str) {
+    if verbosity() < 1 {
+        return;
+    }
     let _ = print::err(&format!("\x1b[91mERROR {message}\x1b[0m\n"));
 }
 
@@ -79,6 +88,6 @@ mod tests {
         assert_eq!(verbosity(), 0);
         info("suppressed");
         debug("suppressed");
-        warn("visible");
+        warn("suppressed");
     }
 }

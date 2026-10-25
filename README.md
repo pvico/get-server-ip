@@ -94,14 +94,16 @@ Usage: get-server-ip [OPTIONS]
 
 Options:
   -c, --config <FILE_PATH>  Path to the configuration file (default: .get-server-ip/config.json next to the executable)
-  -v, --verbose...          Increase the verbosity of the log output (-v: info, -vv: debug)
+  -v, --verbose...          Increase the verbosity of the log output (-v: warnings and info, -vv: debug)
   -h, --help                Print help
   -V, --version             Print version
 ```
 
-All log output goes to stderr (warnings and errors always, info with `-v`,
-debug with `-vv` or in debug builds); stdout only ever carries the IP, so the
-output can be used directly in command substitution:
+By default the output is exactly the IP and nothing else, like the old Zig
+binary — fatal errors aside. Failures of the IP sources are warnings on
+stderr, shown with `-v`; `-vv` adds debug output. Either way stdout only
+ever carries the IP, so the output can be used directly in command
+substitution:
 
 ```bash
 ssh -p 2222 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "$(get-server-ip 2>/dev/null)"
