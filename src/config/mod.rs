@@ -2,4 +2,4 @@
 #[allow(clippy::module_inception)]
 pub mod config;
 
-pub use config::init_from_json_file;
+pub use config::{Config, init_from_json_file};

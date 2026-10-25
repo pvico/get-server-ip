@@ -11,6 +11,10 @@ serde_json = "1"
 # Direct FFI access to getifaddrs/freeifaddrs for local interface enumeration
 # (same POSIX API the Zig implementation used via @cImport).
 libc = "0.2"
+# The gist URI is fetched over HTTPS, so the TLS stack is required (unlike
+# the HTTP-only lamp_control plugin): rustls keeps the build self-contained
+# for cross-compilation; gzip handles compressed responses.
+ureq = { version = "3", default-features = false, features = ["rustls", "gzip"] }
 
 [[bin]]
 name = "get-server-ip"
