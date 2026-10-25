@@ -1,0 +1,27 @@
+[package]
+name = "get-server-ip"
+version = "0.1.1"
+edition = "2024"
+description = "A utility to find the (dynamic) IPv6 address of a server"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Direct FFI access to getifaddrs/freeifaddrs for local interface enumeration
+# (same POSIX API the Zig implementation used via @cImport).
+libc = "0.2"
+
+[[bin]]
+name = "get-server-ip"
+path = "src/main.rs"
+
+# Size-optimized release builds: the utility is invoked per SSH connection
+# (e.g. `ssh ... "$(get-server-ip 2>/dev/null)"`), so a small binary keeps
+# process startup cheap.
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
