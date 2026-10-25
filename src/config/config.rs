@@ -25,16 +25,19 @@ use serde::Deserialize;
 use crate::utilities::logger;
 
 /// The parsed configuration. Missing fields fall back to the empty values of
-/// the Zig `Config.init`.
+/// the Zig `Config.init`. The canonical key spelling is kebab-case (matching
+/// the Zig project's `config.json` template); the snake_case spellings of
+/// the disabled Zig parser (`gist_uri`, `ddns_domains`) are accepted as
+/// aliases so configs written for it keep working.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Config {
     /// GitHub gist URI holding the published IP address.
-    #[serde(default)]
+    #[serde(default, alias = "gist_uri")]
     pub gist_uri: String,
 
     /// Dynamic-DNS domains to resolve and compare against.
-    #[serde(default)]
+    #[serde(default, alias = "ddns_domains")]
     pub ddns_domains: Vec<String>,
 }
 
@@ -142,6 +145,25 @@ mod tests {
         let config = from_json("{}").unwrap();
         assert_eq!(config.gist_uri, "");
         assert!(config.ddns_domains.is_empty());
+    }
+
+    #[test]
+    fn accepts_snake_case_keys_from_zig_era_configs() {
+        let config = from_json(
+            r#"{
+                "gist_uri": "https://gist.github.com/me/abc123",
+                "ddns_domains": ["a.example.com"]
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(config.gist_uri, "https://gist.github.com/me/abc123");
+        assert_eq!(config.ddns_domains, vec!["a.example.com"]);
+    }
+
+    #[test]
+    fn spellings_must_not_be_mixed() {
+        // Both spellings of the same field in one file is a mistake.
+        assert!(from_json(r#"{ "gist_uri": "a", "gist-uri": "b" }"#).is_err());
     }
 
     #[test]
