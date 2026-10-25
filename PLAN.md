@@ -133,6 +133,13 @@ eventually becomes the default branch.
 
 ### Phase 4 — Cross-compilation targets
 
+> Update: replaced by native builds on the target devices. Zig is not used
+> at all — neither for the original build nor for linking. All devices
+> (rpi5-server, nanopi-r3s-lts, btcnode) have rustup toolchains, so
+> `scripts/build-remote.sh` syncs the sources to each device over SSH,
+> runs `cargo build --release --locked` there and fetches the binary into
+> `dist/<host>/get-server-ip`.
+
 Replace the Zig `build.zig` target matrix with cargo tooling (evaluate and
 pick one):
 
