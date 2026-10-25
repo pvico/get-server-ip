@@ -1,0 +1,22 @@
+# Cross-compilation targets replacing the Zig `build.zig` matrix, using
+# cargo-zigbuild (reuses the local Zig toolchain for linking against a
+# conservative glibc default):
+#
+#   cargo linux-x86_64   -> x86_64-unknown-linux-gnu
+#   cargo linux-aarch64  -> aarch64-unknown-linux-gnu (Raspberry Pi 5)
+#   cargo rpi0           -> arm-unknown-linux-gnueabihf (Raspberry Pi Zero)
+#
+# Binaries land in target/<triple>/release/get-server-ip; the release
+# profile in Cargo.toml already applies the size optimizations the Zig
+# build had in its ReleaseSmall mode.
+
+[alias]
+linux-x86_64 = "zigbuild --release --target x86_64-unknown-linux-gnu"
+linux-aarch64 = "zigbuild --release --target aarch64-unknown-linux-gnu"
+rpi0 = "zigbuild --release --target arm-unknown-linux-gnueabihf"
+
+# The Rust target arm-unknown-linux-gnueabihf already targets the ARMv6
+# baseline; pin the exact CPU of the Raspberry Pi Zero for parity with the
+# Zig build (Zig: cpu_model = arm1176jzf_s).
+[target.arm-unknown-linux-gnueabihf]
+rustflags = ["-C", "target-cpu=arm1176jzf-s"]
